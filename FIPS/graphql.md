@@ -1,0 +1,817 @@
+| FIP | Title                         | Status | Category  | Author                                 | Created  |
+| --- | ----------------------------- | ------ | --------- | -------------------------------------- | -------- |
+| -   | Factomd GraphQL Wapper Schema | WIP    | Interface | Alex Carrithers \<<alex@factoshi.io>\> | 20190714 |
+
+# Summary
+
+The present FIP outlines a schema for a GraphQL wrapper around the Factomd RPC API. The schema is designed for an implementation that communicates directly with the Factomd RPC API without the use of an intermediary database.
+
+# Motivation
+
+### Why GraphQL?
+
+1. **Declarative queries**: Factomd's data structures form a graph. The GraphQL schema describes the structure of that graph and the content of each node, or data structure, within the graph. An implementation of the schema enables a client to make declarative queries that reflect natural relationships between Factomd's data structures and, in concrete terms, the shape of the response from the server. This improves developer experience and can have a significant, positive impact on API performance, particularly in high-latency and low-bandwidth environments.
+
+2. **Strongly typed**: A GraphQL schema is a contract between the server and the client. As such, the client "can ensure that the query is both syntactically correct and valid within the GraphQL type system before execution, i.e. at development time, and the server can make certain guarantees about the shape and nature of the response" ([ref](https://reactjs.org/blog/2015/05/01/graphql-introduction.html)).
+
+3. **Subscriptions**: The GraphQL specification descibes three types of operation or root types: queries, mutations and subscriptions. The first two of these operations, queries and mutations, can be achieved with similar results using the current Factomd RPC API. However, the third type, subscriptions, cannot. A GraphQL subscription is an operation that establishes a websocket connection between the server and the client. The client can therefore subscribe to Factomd events, and the server will push those events to the client. Currently, the only way to learn of new events is to poll Factomd and compare the response to a previous response held in memory or storage.
+
+### Why a wrapper around the RPC API?
+
+A wrapper around the RPC API is lightweight. It requires minimal setup and no sync time. Moreover, it can be torn down without the need to protect a database. It is cheap to run, both in terms of time and in terms of host specification. Its stateless nature makes horizontal scalability trivial. It is the closest we can get to a native API without altering Factomd.
+
+### Why a formal proposal?
+
+A formal proposal for a Factomd GraphQL wrapper paves the way for competing implementations written in different (or the same) languages that maintain interoperability for clients.
+
+# Specification
+
+```graphql
+# ***************************** #
+#   ---- CUSTOM SCALARS ----    #
+# ***************************** #
+
+"A hex-encoded Sha256 hash."
+scalar Hash
+
+"A valid public factoid address."
+scalar PublicFactoidAddress
+
+"A valid public entry credit address."
+scalar PublicEntryCreditAddress
+
+"A valid public address"
+scalar PublicAddress
+
+"Block height. Must be a positive integer."
+scalar Height
+
+# ************************************************* #
+#   ---- QUERIES SUBSCRIPTIONS AND MUTATIONS ----   #
+# ************************************************* #
+
+type Query {
+    "Query an admin block by the specified block hash. Will return null if block cannot be found."
+    adminBlock(hash: Hash!): AdminBlock
+    "Query an admin block by the specified block height. Will return null if block cannot be found."
+    adminBlockByHeight(height: Height!): AdminBlock
+    "Query the balances of a list of public entry credit or factoid addresses."
+    balances(addresses: [PublicAddress!]!): [Address!]!
+    "Query the entry block at the tip of the specified chain. Will return null if chain cannot be found."
+    chainHead(chainId: Hash!): EntryBlock
+    "Query the status of a commit."
+    commitAck(hash: Hash!): EntryCommitAck!
+    "Query protocol time state."
+    currentMinute: CurrentMinute!
+    "Query a directory block by the specified block hash. Will return null if block cannot be found."
+    directoryBlock(hash: Hash!): DirectoryBlock
+    "Query a directory block by the specified block height. Will return null if block cannot be found."
+    directoryBlockByHeight(height: Height!): DirectoryBlock
+    "Query the directory block at the tip of the directory chain."
+    directoryBlockHead: DirectoryBlock!
+    "Query an entry by its hash. Will return null if entry cannot be found."
+    entry(hash: Hash!): Entry
+    "Query the status of an Entry."
+    entryAck(hash: Hash!, chainId: Hash!): EntryCommitAck!
+    "Query an entry block by the specified block hash. Will return null if block cannot be found."
+    entryBlock(hash: Hash!): EntryBlock
+    "Query an entry credit block by the specified block hash. Will return null if block cannot be found."
+    entryCreditBlock(hash: Hash!): EntryCreditBlock
+    "Query an entry credit block by the specified block height. Will return null if block cannot be found."
+    entryCreditBlockByHeight(height: Height!): EntryCreditBlock
+    "Query the EC-FCT exchange rate."
+    entryCreditRate: Int!
+    "Query a factoid block by the specified block hash. Will return null if block cannot be found."
+    factoidBlock(hash: Hash!): FactoidBlock
+    "Query a factoid block by the specified block hash. Will return null if block cannot be found."
+    factoidBlockByHeight(height: Height!): FactoidBlock
+    "Factoid transaction status."
+    factoidTransactionAck(hash: Hash!): FactoidTransactionAck!
+    "Query blockchain heights."
+    heights: Heights!
+    "Query paginated pending entries."
+    pendingEntries(first: Int, offset: Int): PaginatedPendingEntries!
+    "Query paginated pending entries."
+    pendingTransactions(first: Int, offset: Int): PaginatedPendingTransactions!
+    "Query properties of factomd."
+    properties: Properties!
+    "Query an entry receipt. Will return null if entry receipt cannot be found."
+    receipt(hash: Hash!): Receipt
+    "Query a transaction by its hash. Will return null if transaction cannot be found."
+    transaction(hash: Hash!): Transaction
+}
+
+type Subscription {
+    "Subscribe to each new admin block."
+    newAdminBlock: AdminBlock!
+    "Subscribe to newly created chains."
+    newChains: [EntryBlock!]!
+    "Subscribe to each new directory block."
+    newDirectoryBlock: DirectoryBlock!
+    "Subscribe to each new entry block for a specified chain."
+    newEntryBlock(chainId: Hash!): EntryBlock!
+    "Subscribe to each new entry credit block."
+    newEntryCreditBlock: EntryCreditBlock!
+    "Subscribe to each new factoid block."
+    newFactoidBlock: FactoidBlock!
+    "Subscribe to new Factoid transactions involving a given address."
+    newFactoidTransaction(address: PublicFactoidAddress!): Transaction!
+}
+
+type Mutation {
+    "Commit a chain."
+    commitChain(commit: String!): Commit!
+    "Commit an entry."
+    commitEntry(commit: String!): Commit!
+    "Reveal a chain."
+    revealChain(reveal: String!): Reveal!
+    "Reveal an entry."
+    revealEntry(reveal: String!): Reveal!
+    "Commit and reveal a chain."
+    addChain(commit: String!, reveal: String!): Reveal!
+    "Commit and reveal an entry."
+    addEntry(commit: String!, reveal: String!): Reveal!
+    "Submit a factoid transaction. Returns the transaction ID."
+    submitTransaction(tx: String!): Hash!
+}
+
+# ************************** #
+#   ---- CUSTOM TYPES ----   #
+# ************************** #
+
+##########
+# Blocks #
+##########
+
+"Admin Block"
+type AdminBlock {
+    "The top 256 bits of a SHA512 checksum of the previous Admin Block."
+    backReferenceHash: Hash!
+    "Hash used by the directory block to reference this admin block."
+    lookupHash: Hash!
+    "The number of bytes the body of this block contains. Big endian."
+    bodySize: Int!
+    "The previous block. Will be null if current block is height 0."
+    previousBlock: AdminBlock
+    "The next block. Will be null if current block is tip of chain."
+    nextBlock: AdminBlock
+    "Array of admin entries contained within this admin block."
+    entries: [AdminEntry!]!
+    "Parent directory block."
+    directoryBlock: DirectoryBlock!
+}
+
+"Directory Block"
+type DirectoryBlock {
+    "The key merkle root of the current block."
+    keyMR: Hash!
+    "The previous block. Will be null if current block is height 0."
+    previousBlock: DirectoryBlock
+    "The next block. Will be null if current block is tip of chain."
+    nextBlock: DirectoryBlock
+    "Block height."
+    height: Height!
+    "Milliseconds since Unix epoch. Marks the start of the block."
+    timestamp: Float!
+    "The admin block referenced by this directory block."
+    adminBlock: AdminBlock!
+    "The entry blocks referenced by this directory block."
+    entryBlockPage(first: Int, offset: Int): PaginatedEntryBlocks!
+    "The entry credit block referenced by this directory block."
+    entryCreditBlock: EntryCreditBlock!
+    "The factoid block referenced by this directory block."
+    factoidBlock: FactoidBlock!
+}
+
+"Entry Block"
+type EntryBlock {
+    "The key merkle root of the current block."
+    keyMR: Hash!
+    "The ID of the parent chain."
+    chainId: Hash!
+    "Height of entry block. Also known as sequence number."
+    sequenceNumber: Height!
+    "Milliseconds since Unix epoch. Marks the start of the block."
+    timestamp: Float!
+    "The previous block. Will be null if current block is sequence number 0."
+    previousBlock: EntryBlock
+    "Paginated entries contained within this entry block."
+    entryPage(first: Int, offset: Int): PaginatedEntries!
+    "Parent directory block."
+    directoryBlock: DirectoryBlock!
+}
+
+"Entry Credit Block"
+type EntryCreditBlock {
+    "The SHA256 hash of the serialized header."
+    headerHash: Hash!
+    "The SHA256 checksum of the entire entry credit block."
+    fullHash: Hash!
+    "The SHA256 hash of the serialized body."
+    bodyHash: Hash!
+    "The number of bytes the body of this block contains. Big endian."
+    bodySize: Int!
+    "The number of objects this block contains. Big endian."
+    objectCount: Int!
+    "The previous block. Will be null if current block is height 0."
+    previousBlock: EntryCreditBlock
+    "The next block. Will be null if current block is tip of chain."
+    nextBlock: EntryCreditBlock
+    "Paginated commits contained within the entry credit block."
+    commitPage(first: Int, offset: Int): PaginatedCommits!
+    "Parent directory block."
+    directoryBlock: DirectoryBlock!
+}
+
+"Factoid Block"
+type FactoidBlock {
+    "The key merkle root of the current block."
+    keyMR: Hash!
+    "The Merkle root of the Factoid transactions contained in this block."
+    bodyMR: Hash!
+    "Data structure which allows proofs of only the value transfers."
+    ledgerKeyMR: Hash!
+    "The previous block. Will be null if current block is height 0."
+    previousBlock: FactoidBlock
+    "The next block. Will be null if current block is tip of chain."
+    nextBlock: FactoidBlock
+    "EC-FCT exchange rate."
+    entryCreditRate: Int!
+    "Paginated transactions contained within the factoid block."
+    transactionPage(first: Int, offset: Int): PaginatedTransactions!
+    "Parent directory block."
+    directoryBlock: DirectoryBlock!
+}
+
+###########
+# Address #
+###########
+
+"Public address and associated amount."
+type Address {
+    "Amount may be balance or transaction input/output value, depending on the context."
+    amount: Float!
+    "Public address."
+    address: PublicAddress!
+}
+
+########
+# Acks #
+########
+
+"Possible states of a ledger entry."
+enum Ack {
+    "Found in the blockchain."
+    DBlockConfirmed
+    "Found on local node but not on the network."
+    NotConfirmed
+    "Found on the network but not yet in the blockchain."
+    TransactionACK
+    "Not found anywhere."
+    Unknown
+}
+
+"The status and timestamp of an Ack."
+type AckStatus {
+    "Timestamp of the ack. Will be null if status is Unknown."
+    timestamp: Float
+    "The status of an ack."
+    status: Ack!
+}
+
+"State of an entry or commit."
+type EntryCommitAck {
+    "The hash of the commit."
+    commitHash: Hash!
+    "The hash of the entry. May be null if the commit has not yet been revealed."
+    entryHash: Hash
+    "The status of the commit."
+    commitStatus: AckStatus!
+    "The status of the entry."
+    entryStatus: AckStatus
+}
+
+"Status of a factoid transaction."
+type FactoidTransactionAck {
+    "Transaction hash, otherwise known as transaction ID."
+    hash: Hash!
+    "The timestamp of the transaction. Milliseconds since Unix epoch."
+    txTimestamp: Float
+    "The timestamp of the containing block. Milliseconds since Unix epoch."
+    blockTimestamp: Float
+    "The status of the factoid transaction."
+    status: Ack!
+}
+
+############################
+# Non-Admin Ledger Entries #
+############################
+
+"An Entry. Fields may be null if the entry has not yet been revealed."
+type Entry {
+    "The hash of the entry."
+    hash: Hash!
+    "The chain the entry belongs to."
+    chainId: Hash
+    "The timestamp of the entry."
+    timestamp: Float
+    "List of external IDs associated with the entry as base64."
+    externalIds: [String!]
+    "The content of the entry as base64."
+    content: String
+    "The parent entry block of the entry."
+    entryBlock: EntryBlock
+}
+
+"Entry commit included in the blockchain."
+type EntryCommit {
+    "Milliseconds since Unix epoch."
+    timestamp: Float!
+    "The entry that was committed. All fields except hash will be null if not yet revealed."
+    entry: Entry!
+    "The cost of the entry."
+    credits: Int!
+    "The entry credit address that paid for the entry."
+    paymentAddress: PublicEntryCreditAddress!
+    "The signature of this Entry Commit by the payment address."
+    signature: String!
+    "The parent entry credit block of the commit."
+    entryCreditBlock: EntryCreditBlock!
+}
+
+"Factoid Transaction included in the blockchain."
+type Transaction {
+    "The transaction hash. Also known as the transaction ID."
+    hash: Hash!
+    "Milliseconds since Unix epoch."
+    timestamp: Float!
+    "An array of factoid inputs."
+    inputs: [Address!]!
+    "An array of factoid outputs"
+    factoidOutputs: [Address!]!
+    "An array of entry credit outputs."
+    entryCreditOutputs: [Address!]!
+    "The total value of all inputs. Denominated in factoshis."
+    totalInputs: Float!
+    "The total value of all factoid outputs. Denominated in factoshis."
+    totalFactoidOutputs: Float!
+    "The total value of all entry credit outputs. Denominated in entry credits."
+    totalEntryCreditOutputs: Float!
+    "The fees burned for the transaction. Denominated in factoshis."
+    fees: Float!
+    "Redeem Condition Datastructures"
+    rcds: [String!]!
+    "The signature needed to satisfy RCD"
+    signatures: [String!]!
+    "The parent factoid block of the transaction."
+    factoidBlock: FactoidBlock!
+}
+
+"Factoid transaction not yet included in the blockchain."
+type PendingTransaction {
+    "The transaction hash. Also known as the transaction ID."
+    hash: Hash!
+    "The status of the commit."
+    status: Ack!
+    "An array of factoid inputs."
+    inputs: [Address!]!
+    "An array of factoid outputs."
+    factoidOutputs: [Address!]!
+    "An array of entry credit outputs."
+    entryCreditOutputs: [Address!]!
+    "The total value of all inputs. Denominated in factoshis."
+    totalInputs: Float!
+    "The total value of all factoid outputs. Denominated in factoshis."
+    totalFactoidOutputs: Float!
+    "The total value of all entry credit outputs. Denominated in entry credits."
+    totalEntryCreditOutputs: Float!
+    "The fees burned for the transaction. Denominated in factoshis."
+    fees: Float!
+}
+
+"Entry not yet included in the blockchain."
+type PendingEntry {
+    "The transaction hash. Also known as the transaction ID."
+    hash: Hash!
+    "The status of the commit."
+    status: Ack!
+    "The chain the entry belongs to."
+    chainId: Hash
+}
+
+"Proof that an entry has been anchored in the bitcoin blockchain."
+type Receipt {
+    "The entry this receipt is for."
+    entry: Entry!
+    "The hash of the bitcoin transaction that anchored this entry into Bitcoin. Null if not yet anchored."
+    bitcoinTransactionHash: Hash
+    "The bitcoin block where the anchored transaction was included. Null if not yet anchored."
+    bitcoinBlockHash: Hash
+    "The merkle proof to connect the entry to the bitcoin transaction."
+    merkleBranch: [MerkleNode!]!
+}
+
+"A node in a merkle tree."
+type MerkleNode {
+    "Left hash."
+    left: Hash!
+    "Right hash."
+    right: Hash!
+    "Hash of top node."
+    top: Hash!
+}
+
+###########################
+# Commit Reveal Responses #
+###########################
+
+"Commit response."
+type Commit {
+    "The hash of the entry that was committed."
+    entryHash: Hash!
+    "The commit transaction hash."
+    transactionHash: Hash!
+    "Double sha256 hash of the commited chain. Only defined on chain commits."
+    chainIdHash: Hash
+}
+
+"Reveal response."
+type Reveal {
+    "The hash of the entry that was revealed."
+    entryHash: Hash!
+    "The entry chain where the entry was revealed."
+    chainId: Hash!
+}
+
+#################
+# Admin Entries #
+#################
+
+"Minimum requirements of an admin entry."
+interface AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+}
+
+"Admin codes attached to each admin entry"
+enum AdminCode {
+    "Admin ID 1"
+    DIRECTORY_BLOCK_SIGNATURE
+    "Admin ID 2"
+    REVEAL_MATRYOSHKA_HASH
+    "Admin ID 3"
+    ADD_REPLACE_MATRYOSHKA_HASH
+    "Admin ID 4"
+    INCREASE_SERVER_COUNT
+    "Admin ID 5"
+    ADD_FEDERATED_SERVER
+    "Admin ID 6"
+    ADD_AUDIT_SERVER
+    "Admin ID 7"
+    REMOVE_FEDERATED_SERVER
+    "Admin ID 8"
+    ADD_FEDERATED_SERVER_SIGNING_KEY
+    "Admin ID 9"
+    ADD_FEDERATED_SERVER_BITCOIN_ANCHOR_KEY
+    "Admin ID 10"
+    SERVER_FAULT_HANDOFF
+    "Admin ID 11"
+    COINBASE_DESCRIPTOR
+    "Admin ID 12"
+    COINBASE_DESCRIPTOR_CANCEL
+    "Admin ID 13"
+    ADD_AUTHORITY_FACTOID_ADDRESS
+    "Admin ID 14"
+    ADD_AUTHORITY_EFFICIENCY
+}
+
+"""
+Authority identity signature to consent to previous directory block.
+AdminIDs: [1]
+AdminCodes: [DIRECTORY_BLOCK_SIGNATURE]
+"""
+type DirectoryBlockSignature implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The identity chain of the signing authority."
+    identityChainId: Hash!
+    "Signature for the previous directory block."
+    previousDirectoryBlockSignature: PreviousDirectoryBlockSignature
+}
+
+"Signature for the previous directory block header."
+type PreviousDirectoryBlockSignature {
+    "Ed25519 public key held in the authority identity chain."
+    publicKey: String!
+    "signature for the previous directory block header"
+    signature: String!
+}
+
+"""
+Determine the order in which the leader servers are rotated. Not currently implemented.
+AdminIDs: [2, 3]
+AdminCodes: [REVEAL_MATRYOSHKA_HASH, ADD_REPLACE_MATRYOSHKA_HASH]
+"""
+type MatryoshkaHash implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "The matryoshka hash."
+    matryoshkaHash: String!
+}
+
+"""
+Increment the server count.
+AdminIDs: [4]
+AdminCodes: [INCREASE_SERVER_COUNT]
+"""
+type IncreaseServerCount implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "Amount by which to increase the server count."
+    amount: Int!
+}
+
+"""
+Add or remove server identity.
+AdminIDs: [5, 6, 7]
+AdminCodes: [ADD_FEDERATED_SERVER, ADD_AUDIT_SERVER, REMOVE_FEDERATED_SERVER]
+"""
+type AddRemoveServer implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "The directory block height at which the change will take effect."
+    directoryBlockHeight: Height!
+}
+
+"""
+Adds an ed25519 public key to an authority identity.
+AdminIDs: [8]
+AdminCodes: [ADD_FEDERATED_SERVER_SIGNING_KEY]
+"""
+type AddFederatedServerSigningKey implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "The priority of the key."
+    keyPriority: Int!
+    "Public key to be added."
+    publicKey: String!
+    "The directory block height at which the change will take effect."
+    directoryBlockHeight: Height!
+}
+
+"""
+Adds an ecdsa public bitcoin signing key to an authority identity.
+AdminIDs: [9]
+AdminCodes: [ADD_FEDERATED_SERVER_BITCOIN_ANCHOR_KEY]
+"""
+type AddFederatedServerBitcoinAnchorKey implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "The priority of the key."
+    keyPriority: Int!
+    "The type of bitcoin key."
+    keyType: String!
+    "The public bitcoin key."
+    ecdsaPublicKey: String!
+}
+
+"""
+Rolls up messages that led to the promotion/demotion of identities during an election.
+Not currently serialized into the blockchain.
+AdminIDs: [10]
+AdminCodes: [SERVER_FAULT_HANDOFF]
+"""
+type ServerFaultHandoff implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+}
+
+"""
+Creates a future genesis transaction.
+AdminIDs: [11]
+AdminCodes: [COINBASE_DESCRIPTOR]
+"""
+type CoinbaseDescriptor implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "Array of coinbase descriptor outputs."
+    outputs: [CoinbaseDescriptorOutput!]!
+}
+
+"Coinbase descriptor output."
+type CoinbaseDescriptorOutput {
+    "Public Address to receive coinbase transaction output."
+    address: PublicFactoidAddress!
+    "Factoid address to receive output."
+    rcdHash: Hash!
+    "Amount by which to increase the address."
+    amount: Int!
+}
+
+"""
+Cancels a specific output index in an earlier Coinbase Descriptor.
+AdminIDs: [12]
+AdminCodes: [COINBASE_DESCRIPTOR_CANCEL]
+"""
+type CoinbaseDescriptorCancel implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The target height containing the descriptor for which an output will be cancelled."
+    descriptorHeight: Height!
+    "This index to be cancelled for the specified descriptor."
+    descriptorIndex: Int!
+}
+
+"""
+Sets a Factoid address to be used in the Coinbase Descriptor.
+AdminIDs: [13]
+AdminCodes: [ADD_AUTHORITY_FACTOID_ADDRESS]
+"""
+type AddAuthorityFactoidAddress implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "Factoid address to receive output."
+    rcdHash: Hash!
+    "Public Address to receive coinbase transaction output."
+    factoidAddress: PublicFactoidAddress!
+}
+
+"""
+Sets what percentage of the Factoid rewards for the specified server are yeilded to the Grant Pool.
+AdminIDs: [14]
+AdminCodes: [ADD_AUTHORITY_EFFICIENCY]
+"""
+type AddAuthorityEfficiency implements AdminEntry {
+    "The ID of the admin entry."
+    id: Int!
+    "The code of the admin entry."
+    code: AdminCode!
+    "The server identity chain."
+    identityChainId: Hash!
+    "Efficiency with two fixed decimal places."
+    efficiency: Int!
+}
+
+############
+# Metadata #
+############
+
+"Blockchain time state."
+type CurrentMinute {
+    "The current block height."
+    leaderHeight: Height!
+    "The highest saved directory block height of the factomd API server."
+    directoryBlockHeight: Height!
+    "The minute number of the open entry block."
+    minute: Int!
+    "The start time of the current block in nano seconds."
+    currentBlockStartTime: Float!
+    "The start time of the current minute in nano seconds."
+    currentMinuteStartTime: Float!
+    "The time as understood by factomd in nano seconds."
+    currentTime: Float!
+    "The number of seconds per block."
+    directoryBlockInSeconds: Int!
+    "Boolean to determine whether factomd thinks it is stalled."
+    stallDetected: Boolean!
+    "The number of seconds before leader node is faulted for failing to provide a necessary message."
+    faultTimeout: Int!
+    "The number of seconds between rounds of an election during a fault."
+    roundTimeout: Int!
+}
+
+"Network and server heights."
+type Heights {
+    "The current block height."
+    leaderHeight: Height!
+    "The highest saved directory block height of the factomd API server."
+    directoryBlockHeight: Height!
+    "The height at which the factomd API server has all the entry blocks."
+    entryBlockHeight: Height!
+    "The height at which the local factomd API server has all the entries."
+    entryHeight: Height!
+}
+
+"Factomd and API properties."
+type Properties {
+    "The version of the factomd API server."
+    factomdVersion: String!
+    "The version of the factomd API."
+    factomdAPIVersion: String!
+}
+
+##############
+# Pagination #
+##############
+
+"Paginated entry blocks"
+type PaginatedEntryBlocks {
+    "Total number entry blocks avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of entry block list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of entry blocks."
+    entryBlocks: [EntryBlock!]!
+}
+
+"Paginated entries"
+type PaginatedEntries {
+    "Total number items avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of item list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of entries."
+    entries: [Entry!]!
+}
+
+"Paginated commits"
+type PaginatedCommits {
+    "Total number items avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of item list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of commits."
+    commits: [EntryCommit!]!
+}
+
+"Paginated transactions"
+type PaginatedTransactions {
+    "Total number items avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of item list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of transactions."
+    transactions: [Transaction!]!
+}
+
+"Paginated pending entries"
+type PaginatedPendingEntries {
+    "Total number items avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of item list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of pending entries."
+    pendingEntries: [PendingEntry!]!
+}
+
+"Paginated pending transactions"
+type PaginatedPendingTransactions {
+    "Total number items avaiable for pagination."
+    totalCount: Int!
+    "Position to offset from beginning of item list."
+    offset: Int!
+    "Length of the current page."
+    pageLength: Int!
+    "An array of pending transactions."
+    pendingTransactions: [PendingTransaction!]!
+}
+```
+
+# Implementation
+
+# Copyright
+
+Copyright and related rights waived via
+[CC0](https://creativecommons.org/publicdomain/zero/1.0/).
